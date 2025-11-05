@@ -1,61 +1,74 @@
+// backend/database.js
 const fs = require('fs');
 const path = require('path');
-const USERS_FILE = path.join(__dirname, 'users.json');
+const config = require('./config');
 
-function readUsers() {
-  if (!fs.existsSync(USERS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+function readDB() {
+    if (!fs.existsSync(config.DB_PATH)) return [];
+    const data = fs.readFileSync(config.DB_PATH, 'utf8');
+    return JSON.parse(data);
 }
 
-function writeUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+function writeDB(users) {
+    fs.writeFileSync(config.DB_PATH, JSON.stringify(users, null, 2));
 }
 
 function getAllUsers() {
-  return readUsers();
+    return readDB();
 }
 
-function createUser(username, email, ip_address, plan = '30gb') {
-  const users = readUsers();
-  const newUser = {
-    id: users.length ? users[users.length - 1].id + 1 : 1,
-    username,
-    email,
-    ip_address,
-    plan,
-    is_active: false,
-    usage_mb: 0
-  };
-  users.push(newUser);
-  writeUsers(users);
-  return newUser;
+function createUser(username, email, ip_address, plan) {
+    const users = readDB();
+    const id = users.length > 0 ? users[users.length - 1].id + 1 : 1;
+    users.push({
+        id,
+        username,
+        email,
+        ip_address,
+        plan,
+        dataUsed: 0,
+        is_active: false
+    });
+    writeDB(users);
+    return id;
 }
 
-function activateUser(userId) {
-  const users = readUsers();
-  const user = users.find(u => u.id == userId);
-  if (user) {
-    user.is_active = true;
-    writeUsers(users);
+function activateUser(id) {
+    const users = readDB();
+    const user = users.find(u => u.id == id);
+    if (user) {
+        user.is_active = true;
+        writeDB(users);
+    }
     return user;
-  }
-  return null;
 }
 
-function updateUserPlan(userId, plan) {
-  const users = readUsers();
-  const user = users.find(u => u.id == userId);
-  if (user) {
-    user.plan = plan;
-    writeUsers(users);
+// ✅ Nouvelle fonction pour mettre à jour un utilisateur
+function updateUser(id, updates = {}) {
+    const users = readDB();
+    const user = users.find(u => u.id == id);
+    if (!user) return null;
+
+    // Met à jour seulement les champs existants
+    Object.keys(updates).forEach(key => {
+        user[key] = updates[key];
+    });
+
+    writeDB(users);
     return user;
-  }
-  return null;
+}
+
+// ✅ Supprimer un utilisateur
+function deleteUser(id) {
+    let users = readDB();
+    users = users.filter(u => u.id != id);
+    writeDB(users);
 }
 
 module.exports = {
-  getAllUsers,
-  createUser,
-  activateUser,
-  updateUserPlan
+    getAllUsers,
+    createUser,
+    activateUser,
+    updateUser,
+    deleteUser
 };

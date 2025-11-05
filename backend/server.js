@@ -46,11 +46,13 @@ function isAuthenticated(req, res, next) {
     res.redirect('/admin-login');
 }
 
-// Transporteur email
+// -----------------------
+// Transporteur email SendGrid
+// -----------------------
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    port: 465,
+    secure: true,
     auth: {
         user: 'zanajaona2404@gmail.com',
         pass: 'rgdi zdaz coot ctuq' // mot de passe d'application Gmail
@@ -113,20 +115,28 @@ app.get('/admin/logout', (req, res) => {
 });
 
 // -----------------------
-// Dashboard Admin
+// Dashboard Admin avec recherche
 // -----------------------
+// Dashboard Admin
 app.get('/admin', isAuthenticated, (req, res) => {
-    const users = database.getAllUsers();
-    res.render('admin', { users });
+    let users = database.getAllUsers();
+
+    // Filtrer si un terme de recherche est présent
+    const search = req.query.search ? req.query.search.toLowerCase() : '';
+    if (search) {
+        users = users.filter(user => user.email.toLowerCase().includes(search));
+    }
+
+    res.render('admin', { users, search, ALLOWED_PLANS });
 });
 
+
 // -----------------------
-// Activation utilisateur
+// Actions Admin : activer, modifier, supprimer
 // -----------------------
 app.post('/admin/activate', isAuthenticated, async (req, res) => {
     const { userId } = req.body;
     const user = database.activateUser(userId);
-
     if (!user) {
         req.session.messages.push('Utilisateur non trouvé.');
         return res.redirect('/admin');
@@ -134,43 +144,52 @@ app.post('/admin/activate', isAuthenticated, async (req, res) => {
 
     wireguard.activateUser(user.username, user.ip_address);
 
-    // Readme dynamique
-    const readmeContent = `
-Salut ${user.username} !
-
-Merci d'avoir choisi Starlink VPN. Voici les étapes pour configurer ton VPN et accéder à Internet :
-
-1️⃣ Télécharge et installe WireGuard : https://www.wireguard.com/install/
-2️⃣ Ouvre l'application et importe le fichier .conf : ${user.username}.conf
-3️⃣ Active le tunnel et vérifie ton IP VPN
-4️⃣ Surf sur Internet en toute sécurité
-
-Support: zanajaona2404@gmail.com
-`;
+    const readmeContent = `Salut ${user.username} !
+Merci d'avoir choisi Starlink VPN. Voici les étapes pour configurer votre VPN :
+1️⃣ Téléchargez WireGuard : https://www.wireguard.com/install/
+2️⃣ Importez le fichier .conf : ${user.username}.conf
+3️⃣ Activez le tunnel
+Support: zanajaona2404@gmail.com`;
 
     try {
         await transporter.sendMail({
-            from: '"Starlink VPN" <zanajaona2404@gmail.com>',
+            from: '"Starlink VPN" <no-reply@starlinkvpn.com>',
             to: user.email,
-            subject: '✅ Votre configuration VPN Starlink est prête !',
-            text: 'Veuillez trouver ci-joint votre configuration VPN et le guide d’installation.',
+            subject: '✅ Configuration VPN prête !',
+            text: readmeContent,
             attachments: [
                 { filename: `${user.username}.conf`, path: path.join(config.CLIENTS_DIR, `${user.username}.conf`) },
                 { filename: 'readme.txt', content: readmeContent }
             ]
         });
-
         req.session.messages.push(`✅ ${user.username} activé et email envoyé !`);
     } catch (err) {
         console.error(err);
         req.session.messages.push(`⚠️ ${user.username} activé mais email non envoyé.`);
     }
+    res.redirect('/admin');
+});
 
+app.post('/admin/update-plan', isAuthenticated, (req, res) => {
+    const { userId, plan } = req.body;
+    if (!ALLOWED_PLANS[plan]) {
+        req.session.messages.push('Plan invalide.');
+        return res.redirect('/admin');
+    }
+    database.updateUser(userId, { plan });
+    req.session.messages.push('Plan mis à jour avec succès.');
+    res.redirect('/admin');
+});
+
+app.post('/admin/delete', isAuthenticated, (req, res) => {
+    const { userId } = req.body;
+    database.deleteUser(userId);
+    req.session.messages.push('Utilisateur supprimé avec succès.');
     res.redirect('/admin');
 });
 
 // -----------------------
-// Téléchargement fichier .conf
+// Téléchargement .conf
 // -----------------------
 app.get('/download/:username', (req, res) => {
     const safeUsername = req.params.username.replace(/[^\w.-]/g, '_');
@@ -180,7 +199,7 @@ app.get('/download/:username', (req, res) => {
 });
 
 // -----------------------
-// Surveillance consommation
+// Surveillance consommation et alertes
 // -----------------------
 function monitorUsage() {
     const users = database.getAllUsers();
@@ -198,7 +217,7 @@ function monitorUsage() {
 
             if (alertType) {
                 transporter.sendMail({
-                    from: '"Starlink VPN" <zanajaona2404@gmail.com>',
+                    from: '"Starlink VPN" <no-reply@starlinkvpn.com>',
                     to: user.email,
                     subject: `⚠️ Alerte consommation VPN : ${alertType}`,
                     text: `Bonjour ${user.username}, votre consommation VPN est à ${percent}% de votre forfait (${user.plan}).`
@@ -210,8 +229,6 @@ function monitorUsage() {
         }
     });
 }
-
-// Vérification toutes les 5 minutes
 setInterval(monitorUsage, 5 * 60 * 1000);
 
 // -----------------------

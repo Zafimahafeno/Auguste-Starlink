@@ -8,17 +8,17 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         body {
-            background-color: #f4f6f9; /* Lighter background */
+            background-color: #f4f6f9;
             padding: 0;
             font-family: 'Poppins', sans-serif;
         }
         .navbar {
-            background-color: #343a40; /* Darker navbar for contrast */
+            background-color: #343a40;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
         .header-content {
             padding: 20px 0;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
             border-bottom: 1px solid #dee2e6;
         }
         .table-container {
@@ -27,15 +27,16 @@
             border-radius: 10px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
-        .status-active { color: #198754; font-weight: 600; } 
-        .status-pending { color: #ffc107; font-weight: 600; } 
+        .status-active { color: #198754; font-weight: 600; }
+        .status-pending { color: #ffc107; font-weight: 600; }
         .btn-activate { background: #198754; border: none; color: white; }
         .btn-download { background: #0d6efd; border: none; color: white; }
+        .btn-warning { margin-left: 5px; }
+        .btn-danger { margin-left: 5px; }
         .alert-info { border-left: 5px solid #0d6efd; }
     </style>
 </head>
 <body>
-
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="/admin">⚙️ Auguste VPN</a>
@@ -53,6 +54,7 @@
             <p class="text-muted">Gérez les demandes d'accès et distribuez les configurations VPN.</p>
         </div>
 
+        <!-- Affichage messages -->
         <% if (locals.messages && messages.length > 0) { %>
             <% messages.forEach(msg => { %>
                 <div class="alert alert-info alert-dismissible fade show" role="alert">
@@ -62,6 +64,15 @@
             <% }) %>
         <% } %>
 
+        <!-- Recherche par email -->
+        <form class="mb-3" method="GET" action="/admin">
+            <div class="input-group">
+                <input type="text" class="form-control" placeholder="Rechercher par email..." name="search" value="<%= search || '' %>">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Rechercher</button>
+            </div>
+        </form>
+
+        <!-- Tableau utilisateurs -->
         <div class="table-container">
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle">
@@ -85,19 +96,16 @@
                                     <td><strong><%= user.username %></strong></td>
                                     <td><%= user.email %></td>
                                     <td class="text-muted"><code><%= user.ip_address %></code></td>
-                                    
                                     <td class="text-capitalize">
-                                        <span class="badge bg-secondary">
-                                            <%= user.plan || 'N/A' %>
-                                        </span>
+                                        <span class="badge bg-secondary"><%= user.plan || 'N/A' %></span>
                                     </td>
                                     <td>
-  <% if(user.dataUsed && user.plan) { %>
-    <%= Math.round((user.dataUsed / ALLOWED_PLANS[user.plan]) * 100) %> %
-  <% } else { %>
-    0%
-  <% } %>
-</td>
+                                        <% if(user.dataUsed && user.plan) { %>
+                                            <%= Math.round((user.dataUsed / ALLOWED_PLANS[user.plan]) * 100) %> %
+                                        <% } else { %>
+                                            0%
+                                        <% } %>
+                                    </td>
                                     <td>
                                         <% if (user.is_active) { %>
                                             <span class="status-active"><i class="bi bi-check-circle-fill"></i> Actif</span>
@@ -118,12 +126,29 @@
                                                 <i class="bi bi-download"></i> Config
                                             </a>
                                         <% } %>
+
+                                        <!-- Modifier Plan -->
+                                        <form method="POST" action="/admin/update-plan" style="display:inline;">
+                                            <input type="hidden" name="userId" value="<%= user.id %>">
+                                            <select name="plan" class="form-select form-select-sm d-inline w-auto">
+                                                <% Object.keys(ALLOWED_PLANS).forEach(p => { %>
+                                                    <option value="<%= p %>" <%= user.plan === p ? 'selected' : '' %>><%= p %></option>
+                                                <% }) %>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-warning">Modifier</button>
+                                        </form>
+
+                                        <!-- Supprimer -->
+                                        <form method="POST" action="/admin/delete" style="display:inline;">
+                                            <input type="hidden" name="userId" value="<%= user.id %>">
+                                            <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                        </form>
                                     </td>
                                 </tr>
                             <% }) %>
                         <% } else { %>
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     <i class="bi bi-info-circle-fill"></i> Aucun utilisateur inscrit pour le moment.
                                 </td>
                             </tr>
@@ -135,7 +160,7 @@
 
         <div class="mt-4 text-center text-muted">
             <small>
-                <i class="bi bi-exclamation-triangle-fill"></i> N’oubliez pas de **recharger l’interface WireGuard** sur le serveur après avoir activé de nouveaux utilisateurs.
+                <i class="bi bi-exclamation-triangle-fill"></i> N’oubliez pas de recharger l’interface WireGuard sur le serveur après activation.
             </small>
         </div>
     </div>
