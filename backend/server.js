@@ -6,15 +6,20 @@ const fs = require('fs');
 const database = require('./database');
 const wireguard = require('./wireguard');
 const config = require('./config');
-const nodemailer = require('nodemailer');
 const { ALLOWED_PLANS, DEFAULT_PLAN } = require('./config');
+const Mailjet = require('node-mailjet');
+// === CONFIG MAILJET API HTTP ===
+const mailjet = new Mailjet({
+  apiKey: 'cb528304f83e50156b5b04d933d8ad20',
+  apiSecret: '55b3d9372b4d99008b28cc0061bb8f87',
+});
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // ⚠️ ADMIN
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'supersecretpassword';
+const ADMIN_USERNAME = 'Auguste';
+const ADMIN_PASSWORD = 'adminstarlink2025';
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -46,18 +51,27 @@ function isAuthenticated(req, res, next) {
     res.redirect('/admin-login');
 }
 
-// -----------------------
-// Transporteur email SendGrid
-// -----------------------
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: 'zanajaona2404@gmail.com',
-        pass: 'rgdi zdaz coot ctuq' // mot de passe d'application Gmail
+// === FONCTION ENVOI EMAIL MAILJET API HTTP ===
+async function sendMail(toEmail, subject, text, attachments = []) {
+    const messages = [{
+        From: { Email: "zanajaona2404@gmail.com", Name: "Auguste Starlink VPN" },
+        To: [{ Email: toEmail }],
+        Subject: subject,
+        TextPart: text,
+        Attachments: attachments.map(att => ({
+            ContentType: 'text/plain',
+            Filename: att.filename,
+            Base64Content: Buffer.from(att.content || fs.readFileSync(att.path)).toString('base64')
+        }))
+    }];
+
+    try {
+        await mailjet.post('send', { version: 'v3.1' }).request({ Messages: messages });
+        console.log(`✅ Email envoyé à ${toEmail}`);
+    } catch (err) {
+        console.error(`❌ Erreur envoi email à ${toEmail}:`, err);
     }
-});
+}
 
 // -----------------------
 // Routes publiques
@@ -117,19 +131,14 @@ app.get('/admin/logout', (req, res) => {
 // -----------------------
 // Dashboard Admin avec recherche
 // -----------------------
-// Dashboard Admin
 app.get('/admin', isAuthenticated, (req, res) => {
     let users = database.getAllUsers();
 
-    // Filtrer si un terme de recherche est présent
     const search = req.query.search ? req.query.search.toLowerCase() : '';
-    if (search) {
-        users = users.filter(user => user.email.toLowerCase().includes(search));
-    }
+    if (search) users = users.filter(u => u.email.toLowerCase().includes(search));
 
     res.render('admin', { users, search, ALLOWED_PLANS });
 });
-
 
 // -----------------------
 // Actions Admin : activer, modifier, supprimer
@@ -144,29 +153,19 @@ app.post('/admin/activate', isAuthenticated, async (req, res) => {
 
     wireguard.activateUser(user.username, user.ip_address);
 
-    const readmeContent = `Salut ${user.username} !
-Merci d'avoir choisi Starlink VPN. Voici les étapes pour configurer votre VPN :
+    const readmeContent = `Bonjour ${user.username} !
+Merci d'avoir choisi Auguste Starlink VPN. Voici les étapes pour configurer votre connexion :
 1️⃣ Téléchargez WireGuard : https://www.wireguard.com/install/
 2️⃣ Importez le fichier .conf : ${user.username}.conf
 3️⃣ Activez le tunnel
 Support: zanajaona2404@gmail.com`;
 
-    try {
-        await transporter.sendMail({
-            from: '"Starlink VPN" <no-reply@starlinkvpn.com>',
-            to: user.email,
-            subject: '✅ Configuration VPN prête !',
-            text: readmeContent,
-            attachments: [
-                { filename: `${user.username}.conf`, path: path.join(config.CLIENTS_DIR, `${user.username}.conf`) },
-                { filename: 'readme.txt', content: readmeContent }
-            ]
-        });
-        req.session.messages.push(`✅ ${user.username} activé et email envoyé !`);
-    } catch (err) {
-        console.error(err);
-        req.session.messages.push(`⚠️ ${user.username} activé mais email non envoyé.`);
-    }
+    await sendMail(user.email, '✅ Confirmation de votre demande !', readmeContent, [
+        { filename: `${user.username}.conf`, path: path.join(config.CLIENTS_DIR, `${user.username}.conf`) },
+        { filename: 'readme.txt', content: readmeContent }
+    ]);
+
+    req.session.messages.push(`✅ ${user.username} activé et email envoyé !`);
     res.redirect('/admin');
 });
 
@@ -203,7 +202,7 @@ app.get('/download/:username', (req, res) => {
 // -----------------------
 function monitorUsage() {
     const users = database.getAllUsers();
-    users.forEach(user => {
+    users.forEach(async user => {
         if (!user.is_active) return;
         const planMB = ALLOWED_PLANS[user.plan];
         const usedMB = user.dataUsed || 0;
@@ -216,15 +215,10 @@ function monitorUsage() {
             else if (percent >= 50) alertType = '50% utilisé';
 
             if (alertType) {
-                transporter.sendMail({
-                    from: '"Starlink VPN" <no-reply@starlinkvpn.com>',
-                    to: user.email,
-                    subject: `⚠️ Alerte consommation VPN : ${alertType}`,
-                    text: `Bonjour ${user.username}, votre consommation VPN est à ${percent}% de votre forfait (${user.plan}).`
-                }).then(() => {
-                    database.updateUser(user.id, { lastAlert: percent });
-                    console.log(`Alerte envoyée à ${user.username} : ${percent}%`);
-                }).catch(console.error);
+                await sendMail(user.email, `⚠️ Alerte consommation VPN : ${alertType}`,
+                    `Bonjour ${user.username}, votre consommation VPN est à ${percent}% de votre forfait (${user.plan}).`);
+                database.updateUser(user.id, { lastAlert: percent });
+                console.log(`Alerte envoyée à ${user.username} : ${percent}%`);
             }
         }
     });
