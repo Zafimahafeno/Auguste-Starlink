@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔐 Auguste - Starlink VPN</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            background-color: #f4f6f9; /* Lighter background */
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+        }
+        .navbar {
+            background-color: #343a40; /* Darker navbar for contrast */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header-content {
+            padding: 20px 0;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .table-container {
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .status-active { color: #198754; font-weight: 600; } 
+        .status-pending { color: #ffc107; font-weight: 600; } 
+        .btn-activate { background: #198754; border: none; color: white; }
+        .btn-download { background: #0d6efd; border: none; color: white; }
+        .alert-info { border-left: 5px solid #0d6efd; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/admin">⚙️ Auguste VPN</a>
+            <div class="ms-auto">
+                <a href="/admin/logout" class="btn btn-outline-danger">
+                    <i class="bi bi-box-arrow-right"></i> Déconnexion
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="header-content">
+            <h2 class="mb-0 text-dark">Tableau de Bord des Utilisateurs</h2>
+            <p class="text-muted">Gérez les demandes d'accès et distribuez les configurations VPN.</p>
+        </div>
+
+        <% if (locals.messages && messages.length > 0) { %>
+            <% messages.forEach(msg => { %>
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <%= msg %>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            <% }) %>
+        <% } %>
+
+        <div class="table-container">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Utilisateur</th>
+                            <th>Email</th>
+                            <th>IP VPN</th>
+                            <th>Tarif</th> 
+                            <th>Consommation</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (users && users.length > 0) { %>
+                            <% users.forEach((user, index) => { %>
+                                <tr>
+                                    <td><%= index + 1 %></td>
+                                    <td><strong><%= user.username %></strong></td>
+                                    <td><%= user.email %></td>
+                                    <td class="text-muted"><code><%= user.ip_address %></code></td>
+                                    
+                                    <td class="text-capitalize">
+                                        <span class="badge bg-secondary">
+                                            <%= user.plan || 'N/A' %>
+                                        </span>
+                                    </td>
+                                    <td>
+  <% if(user.dataUsed && user.plan) { %>
+    <%= Math.round((user.dataUsed / ALLOWED_PLANS[user.plan]) * 100) %> %
+  <% } else { %>
+    0%
+  <% } %>
+</td>
+                                    <td>
+                                        <% if (user.is_active) { %>
+                                            <span class="status-active"><i class="bi bi-check-circle-fill"></i> Actif</span>
+                                        <% } else { %>
+                                            <span class="status-pending"><i class="bi bi-clock-history"></i> En attente</span>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <% if (!user.is_active) { %>
+                                            <form method="POST" action="/admin/activate" style="display:inline;">
+                                                <input type="hidden" name="userId" value="<%= user.id %>">
+                                                <button type="submit" class="btn btn-sm btn-activate">
+                                                    <i class="bi bi-person-check-fill"></i> Activer
+                                                </button>
+                                            </form>
+                                        <% } else { %>
+                                            <a href="/download/<%= user.username %>" class="btn btn-sm btn-download">
+                                                <i class="bi bi-download"></i> Config
+                                            </a>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <i class="bi bi-info-circle-fill"></i> Aucun utilisateur inscrit pour le moment.
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center text-muted">
+            <small>
+                <i class="bi bi-exclamation-triangle-fill"></i> N’oubliez pas de **recharger l’interface WireGuard** sur le serveur après avoir activé de nouveaux utilisateurs.
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
